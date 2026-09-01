@@ -2,13 +2,13 @@ name: BTC Telegram Bot
 
 on:
   schedule:
-    # Roda a cada 30 minutos. Para 1x por hora, troque para: '0 * * * *'
-    # Para 1x por dia, troque para: '0 12 * * *' (12h UTC = 9h BRT)
+    # Roda a cada 30 minutos. O script só ENVIA mensagem quando cair na
+    # janela de decisão de alguma estratégia (verifica sempre, alerta só quando faz sentido).
     - cron: "*/30 * * * *"
-  workflow_dispatch: {} # permite rodar manualmente pela aba Actions no GitHub
+  workflow_dispatch: {}
 
 permissions:
-  contents: write # necessário para o bot commitar o último preço de volta no repo
+  contents: write
 
 jobs:
   run-bot:
@@ -28,10 +28,10 @@ jobs:
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: node scripts/btc-bot.mjs
 
-      - name: Salvar o preço mais recente no repositório
+      - name: Salvar estado (janelas já alertadas)
         run: |
           git config user.name "btc-bot"
           git config user.email "btc-bot@users.noreply.github.com"
-          git add data/last-price.json
-          git diff --staged --quiet || git commit -m "chore: atualizar último preço do BTC"
+          git add data/state.json
+          git diff --staged --quiet || git commit -m "chore: atualizar estado do bot"
           git push
