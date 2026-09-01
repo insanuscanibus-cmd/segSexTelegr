@@ -15,24 +15,47 @@ if (!TELEGRAM_BOT_TOKEN || !TELEGRAM_CHAT_ID) {
   process.exit(1);
 }
 
-async function getBtcPrice() {
-  // CoinGecko: API pública, gratuita, sem necessidade de chave.
-  const url = "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd,brl";
+async function fetchCoinbaseSpot(pair) {
+  const url = `https://api.coinbase.com/v2/prices/${pair}/spot`;
   const res = await fetch(url);
+  const raw = await res.text();
+
   if (!res.ok) {
-    throw new Error(`Falha ao buscar preço do BTC: ${res.status} ${res.statusText}`);
+    throw new Error(`Coinbase respondeu ${res.status} para ${pair}: ${raw}`);
   }
-  const json = await res.json();
-  return {
-    usd: json.bitcoin.usd,
-    brl: json.bitcoin.brl,
-  };
+
+  let json;
+  try {
+    json = JSON.parse(raw);
+  } catch {
+    throw new Error(`Coinbase retornou algo que não é JSON para ${pair}: ${raw.slice(0, 200)}`);
+  }
+
+  const value = Number(json?.data?.amount);
+  if (!Number.isFinite(value)) {
+    throw new Error(`Coinbase não trouxe um valor válido para ${pair}: ${raw.slice(0, 200)}`);
+  }
+  return value;
+}
+
+async function getBtcPrice() {
+  // Coinbase é mais estável em ambientes de CI/CD (GitHub Actions) do que a
+  // API pública da CoinGecko, que limita por IP compartilhado.
+  const [usd, brl] = await Promise.all([
+    fetchCoinbaseSpot("BTC-USD"),
+    fetchCoinbaseSpot("BTC-BRL"),
+  ]);
+  return { usd, brl };
 }
 
 async function readLastPrice() {
   try {
     const raw = await readFile(DATA_FILE, "utf-8");
-    return JSON.parse(raw);
+    const parsed = JSON.parse(raw);
+    if (typeof parsed?.usd !== "number" || typeof parsed?.brl !== "number") {
+      return null; // arquivo existe mas está vazio/no formato antigo
+    }
+    return parsed;
   } catch {
     return null; // primeira execução, ainda não existe histórico
   }
